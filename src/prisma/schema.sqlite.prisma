@@ -1,0 +1,210 @@
+// This is your Prisma schema file for SQLite local development
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  address     String?
+  phone       String?
+  email       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  menuItems   MenuItem[]
+  orders      Order[]
+  coupons     Coupon[]
+  categories  Category[]
+  admins      Admin[]
+
+  @@map("stores")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  storeId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  store     Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  menuItems MenuItem[]
+
+  @@unique([storeId, slug])
+  @@map("categories")
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  size        String?  // For items with multiple sizes like "Full/Half"
+  imageUrl    String?
+  isAvailable Boolean  @default(true)
+  isVeg       Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  categoryId  String
+  storeId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  category     Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderItems   OrderItem[]
+  inventory    Inventory?
+
+  @@map("menu_items")
+}
+
+model Inventory {
+  id                String   @id @default(cuid())
+  currentQuantity   Float
+  unit              String   // kg, pieces, liters, etc.
+  reorderThreshold  Float
+  supplier          String?
+  lastRestockDate   DateTime?
+  menuItemId        String   @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@map("inventory")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  email     String?
+  address   String?
+  isBlocked Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  orders Order[]
+
+  @@map("customers")
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  customerId      String
+  storeId         String
+  status          String      @default("PENDING") // PENDING, CONFIRMED, PREPARING, READY, OUT_FOR_DELIVERY, DELIVERED, CANCELLED
+  paymentMethod   String      // CASH_ON_DELIVERY, UPI, CARD, WALLET, RAZORPAY
+  paymentStatus   String      @default("PENDING") // PENDING, COMPLETED, FAILED, REFUNDED
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  subtotal        Float
+  tax             Float       @default(0)
+  discount        Float       @default(0)
+  total           Float
+  couponId        String?
+  notes           String?
+  estimatedTime   Int?        // in minutes
+  deliveredAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  customer   Customer   @relation(fields: [customerId], references: [id])
+  store      Store      @relation(fields: [storeId], references: [id])
+  coupon     Coupon?    @relation(fields: [couponId], references: [id])
+  orderItems OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  menuItemId String
+  quantity  Int
+  price     Float // Price at time of order
+  notes     String?
+
+  // Relations
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@map("order_items")
+}
+
+model Coupon {
+  id              String       @id @default(cuid())
+  code            String       @unique
+  name            String
+  description     String?
+  type            String       // PERCENTAGE, FIXED_AMOUNT
+  value           Float
+  minOrderAmount  Float?
+  maxDiscount     Float?
+  usageLimit      Int?
+  usedCount       Int          @default(0)
+  isActive        Boolean      @default(true)
+  validFrom       DateTime
+  validUntil      DateTime
+  storeId         String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  store  Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("coupons")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("MANAGER") // SUPER_ADMIN, MANAGER, STAFF
+  isActive  Boolean  @default(true)
+  storeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
+}
+
+model Notification {
+  id          String             @id @default(cuid())
+  type        String             // ORDER_UPDATE, PAYMENT_CONFIRMATION, DELIVERY_UPDATE, PROMOTIONAL, SYSTEM
+  recipient   String             // phone, email, or order ID
+  message     String
+  status      String             @default("PENDING") // PENDING, SENT, FAILED
+  sentAt      DateTime?
+  error       String?
+  metadata    String?            // JSON string for SQLite
+  createdAt   DateTime           @default(now())
+
+  @@map("notifications")
+}
